@@ -1,0 +1,43 @@
+name: Cleanup old NAVAREA files (30 days)
+
+on:
+  schedule:
+    - cron: "30 6 * * *"  # once a day, after the main toolkit's daily run
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Delete dated files older than 30 days
+        run: |
+          set -e
+          cd output
+          CUTOFF=$(date -d "30 days ago" +%Y%m%d)
+          DELETED=0
+          for f in NAVAREA_*_usermap_*.csv; do
+            [ -e "$f" ] || continue
+            # filename pattern: NAVAREA_<AREA>_usermap_YYYYMMDD_HHMM.csv
+            # git checkout resets mtimes, so we parse the date from the
+            # filename itself rather than relying on filesystem timestamps.
+            FDATE=$(echo "$f" | grep -oP '(?<=_usermap_)\d{8}')
+            if [ -n "$FDATE" ] && [ "$FDATE" -lt "$CUTOFF" ]; then
+              echo "Deleting $f (dated $FDATE, older than cutoff $CUTOFF)"
+              rm -f "$f"
+              DELETED=$((DELETED+1))
+            fi
+          done
+          echo "Deleted $DELETED file(s)"
+
+      - name: Commit deletions
+        run: |
+          git config user.name "navarea-cleanup"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A output/
+          git diff --cached --quiet || git commit -m "Cleanup: remove NAVAREA files older than 30 days"
+          git diff --cached --quiet || git push
