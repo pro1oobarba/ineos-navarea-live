@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>INEOS NAVAREA — файлы для ECDIS</title>
+<title>NavWarn Hub — файлы для ECDIS</title>
 <style>
   :root {
     --bg: #0b1220;
@@ -119,20 +119,20 @@
 </head>
 <body>
 <main>
-  <h1>INEOS NAVAREA</h1>
+  <h1>NavWarn Hub</h1>
   <p class="subtitle">Навигационные предупреждения, готовые к загрузке в JRC ECDIS (JAN-9201 user map CSV). Обновляется автоматически.</p>
 
   <div id="areas"></div>
 
   <footer>
     Генерируется автоматически из <a href="https://www.sealagom.com" target="_blank" rel="noopener">SeaLagom</a> через
-    <a href="https://github.com/pro1oobarba/ineos-nav-toolkit" target="_blank" rel="noopener">ineos-nav-toolkit</a>.
+    navwarn-hub-toolkit (private).
     Файлы старше 30 дней удаляются автоматически.
   </footer>
 </main>
 
 <script>
-const REPO = "pro1oobarba/ineos-navarea-live";
+const REPO = "pro1oobarba/navwarn-hub";
 const AREAS = [
   { code: "IV", label: "NAVAREA IV" },
   { code: "I", label: "NAVAREA I" },

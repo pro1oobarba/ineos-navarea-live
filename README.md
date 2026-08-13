@@ -1,17 +1,19 @@
-# INEOS NAVAREA — Live ECDIS Files
+# NavWarn Hub — Live ECDIS Files
 
 Auto-published NAVAREA warning files, converted to JRC ECDIS user-map CSV. This repo is public
 on purpose — NAVAREA warnings are public maritime safety information, not sensitive data — so the
 files are downloadable from any computer without logging in.
 
-Generated automatically by [ineos-nav-toolkit](https://github.com/pro1oobarba/ineos-nav-toolkit)
+Download page: **https://pro1oobarba.github.io/navwarn-hub/**
+
+Generated automatically by [navwarn-hub-toolkit](https://github.com/pro1oobarba/navwarn-hub-toolkit)
 (the private toolkit repo, kept separate to avoid publishing vessel/crew-specific files here).
 
 ## Stable download links (always the latest file, no login)
 
 ```
-https://raw.githubusercontent.com/pro1oobarba/ineos-navarea-live/main/output/NAVAREA_IV_latest.csv
-https://raw.githubusercontent.com/pro1oobarba/ineos-navarea-live/main/output/NAVAREA_I_latest.csv
+https://raw.githubusercontent.com/pro1oobarba/navwarn-hub/main/output/NAVAREA_IV_latest.csv
+https://raw.githubusercontent.com/pro1oobarba/navwarn-hub/main/output/NAVAREA_I_latest.csv
 ```
 
 Paste either link straight into a browser on any computer (work PC included) — it downloads/opens
