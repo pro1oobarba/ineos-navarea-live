@@ -52,6 +52,11 @@
     font-size: 0.85rem;
     margin-bottom: 14px;
   }
+  .download-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
   .download-btn {
     display: inline-block;
     background: var(--accent);
@@ -64,6 +69,23 @@
     transition: background 0.15s;
   }
   .download-btn:hover { background: var(--accent-hover); }
+  .download-btn.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .download-btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .format-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 8px;
+    background: var(--border);
+    color: var(--muted);
+    vertical-align: middle;
+  }
   details {
     margin-top: 14px;
   }
@@ -120,7 +142,7 @@
 <body>
 <main>
   <h1>NavWarn Hub</h1>
-  <p class="subtitle">Навигационные предупреждения, готовые к загрузке в JRC ECDIS (JAN-9201 user map CSV). Обновляется автоматически.</p>
+  <p class="subtitle">Навигационные предупреждения, готовые к загрузке в ECDIS (JRC JAN-9201 CSV или Furuno userchart XML). Обновляется автоматически.</p>
 
   <div id="areas"></div>
 
@@ -136,6 +158,16 @@ const REPO = "pro1oobarba/navwarn-hub";
 const AREAS = [
   { code: "IV", label: "NAVAREA IV" },
   { code: "I", label: "NAVAREA I" },
+  { code: "II", label: "NAVAREA II" },
+  { code: "III", label: "NAVAREA III" },
+  { code: "VII", label: "NAVAREA VII" },
+  { code: "XII", label: "NAVAREA XII" },
+];
+// Each area produces both formats every run (see navarea_fetch_and_convert.py) -
+// jrc is the original JAN-9201 CSV, furuno is the userchart XML.
+const FORMATS = [
+  { key: "jrc", label: "JRC", ext: "csv", tagPattern: (code) => `NAVAREA_${code}_usermap_`, latestName: (code) => `NAVAREA_${code}_latest.csv` },
+  { key: "furuno", label: "Furuno", ext: "xml", tagPattern: (code) => `NAVAREA_${code}_furuno_`, latestName: (code) => `NAVAREA_${code}_furuno_latest.xml` },
 ];
 
 function formatBytes(bytes) {
@@ -145,23 +177,29 @@ function formatBytes(bytes) {
 }
 
 function parseTimestampFromName(name) {
-  // NAVAREA_IV_usermap_20260813_0600.csv -> 2026-08-13 06:00
-  const m = name.match(/(\d{8})_(\d{4})\.csv$/);
+  // NAVAREA_IV_usermap_20260813_0600.csv / NAVAREA_IV_furuno_20260813_0600.xml -> 2026-08-13 06:00
+  const m = name.match(/(\d{8})_(\d{4})\.\w+$/);
   if (!m) return null;
   const [, ymd, hm] = m;
   return `${ymd.slice(0,4)}-${ymd.slice(4,6)}-${ymd.slice(6,8)} ${hm.slice(0,2)}:${hm.slice(2,4)} UTC`;
 }
 
-async function loadArea(area) {
+async function loadArea(area, allFiles) {
   const card = document.createElement("div");
   card.className = "area-card";
 
-  const latestUrl = `https://raw.githubusercontent.com/${REPO}/main/output/NAVAREA_${area.code}_latest.csv`;
+  const latestButtons = FORMATS
+    .map((fmt) => {
+      const url = `https://raw.githubusercontent.com/${REPO}/main/output/${fmt.latestName(area.code)}`;
+      const secondary = fmt.key !== "jrc" ? " secondary" : "";
+      return `<a class="download-btn${secondary}" href="${url}" download>Скачать ${fmt.label}</a>`;
+    })
+    .join("");
 
   card.innerHTML = `
     <h2>${area.label}</h2>
-    <div class="meta">Всегда актуальный файл, без входа в аккаунт</div>
-    <a class="download-btn" href="${latestUrl}" download>Скачать последний CSV</a>
+    <div class="meta">Всегда актуальные файлы, без входа в аккаунт</div>
+    <div class="download-row">${latestButtons}</div>
     <details>
       <summary>История по датам</summary>
       <ul class="history-list"><li class="empty">Загрузка...</li></ul>
@@ -171,12 +209,12 @@ async function loadArea(area) {
 
   const list = card.querySelector(".history-list");
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/output`);
-    if (!res.ok) throw new Error(`GitHub API вернул ${res.status}`);
-    const files = await res.json();
-    const matching = files
-      .filter((f) => f.name.startsWith(`NAVAREA_${area.code}_usermap_`) && f.name.endsWith(".csv"))
-      .sort((a, b) => b.name.localeCompare(a.name));
+    if (!allFiles) throw new Error("GitHub API недоступен");
+    const matching = FORMATS.flatMap((fmt) =>
+      allFiles
+        .filter((f) => f.name.startsWith(fmt.tagPattern(area.code)) && f.name.endsWith(`.${fmt.ext}`))
+        .map((f) => ({ ...f, fmt }))
+    ).sort((a, b) => b.name.localeCompare(a.name));
 
     if (!matching.length) {
       list.innerHTML = '<li class="empty">Пока нет истории</li>';
@@ -186,7 +224,7 @@ async function loadArea(area) {
     list.innerHTML = matching
       .map((f) => {
         const when = parseTimestampFromName(f.name) ?? f.name;
-        return `<li><a href="${f.download_url}" download><span>${when}</span><span class="size">${formatBytes(f.size)}</span></a></li>`;
+        return `<li><a href="${f.download_url}" download><span><span class="format-tag">${f.fmt.label}</span>${when}</span><span class="size">${formatBytes(f.size)}</span></a></li>`;
       })
       .join("");
   } catch (err) {
@@ -194,7 +232,19 @@ async function loadArea(area) {
   }
 }
 
-AREAS.forEach(loadArea);
+async function loadAll() {
+  let allFiles = null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/output`);
+    if (!res.ok) throw new Error(`GitHub API вернул ${res.status}`);
+    allFiles = await res.json();
+  } catch (err) {
+    console.error("Failed to load file listing", err);
+  }
+  AREAS.forEach((area) => loadArea(area, allFiles));
+}
+
+loadAll();
 </script>
 </body>
 </html>
