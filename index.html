@@ -137,6 +137,90 @@
     font-size: 0.85rem;
     padding: 8px 4px;
   }
+  .converter {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 32px 0;
+  }
+  .converter h2 {
+    margin: 0 0 4px;
+    font-size: 1.1rem;
+  }
+  .converter .meta {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+  }
+  .converter label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .converter .field {
+    margin-bottom: 14px;
+  }
+  .converter input[type="text"],
+  .converter textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    padding: 10px 12px;
+    box-sizing: border-box;
+  }
+  .converter textarea {
+    min-height: 140px;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 0.85rem;
+  }
+  .converter input[type="text"]:focus,
+  .converter textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .converter .actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .converter .hint {
+    color: var(--muted);
+    font-size: 0.78rem;
+    margin-top: 6px;
+  }
+  .converter .result {
+    margin-top: 14px;
+    font-size: 0.85rem;
+    padding: 10px 12px;
+    border-radius: 8px;
+    display: none;
+  }
+  .converter .result.ok {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: var(--text);
+    display: block;
+  }
+  .converter .result.warn {
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    color: var(--text);
+    display: block;
+  }
+  .converter .result.error {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #f87171;
+    display: block;
+  }
 </style>
 </head>
 <body>
@@ -146,6 +230,29 @@
 
   <div id="areas"></div>
 
+  <section class="converter">
+    <h2>Конвертировать свой текст</h2>
+    <p class="meta">Вставь текст одного предупреждения (например, полученного по радио или почте) — конвертируется прямо в браузере, никуда не отправляется.</p>
+
+    <div class="field">
+      <label for="conv-ref">Ссылка (необязательно)</label>
+      <input type="text" id="conv-ref" placeholder="NAV IV 0163/26" />
+    </div>
+
+    <div class="field">
+      <label for="conv-text">Текст предупреждения</label>
+      <textarea id="conv-text" placeholder="1. SEISMIC SURVEY IN PROGRESS BY M/V EXAMPLE IN AREA BOUND BY 59-28.0N 001-50.4E, 59-42.6N 002-15.7E, 59-29.0N 003-02.7E. WIDE BERTH REQUESTED."></textarea>
+    </div>
+
+    <div class="actions">
+      <button class="download-btn" id="conv-jrc">Скачать JRC CSV</button>
+      <button class="download-btn secondary" id="conv-furuno">Скачать Furuno XML</button>
+    </div>
+    <p class="hint">Понимает координаты вида 59-28.0N 001-50.4E, ключевые слова BOUND BY / JOINING / TRACKLINE, нумерованные и буквенные пункты (1. / A.), и списки буровых (RIGLIST).</p>
+
+    <div class="result" id="conv-result"></div>
+  </section>
+
   <footer>
     Генерируется автоматически из <a href="https://www.sealagom.com" target="_blank" rel="noopener">SeaLagom</a> через
     navwarn-hub-toolkit (private).
@@ -153,6 +260,7 @@
   </footer>
 </main>
 
+<script src="convert-engine.js"></script>
 <script>
 const REPO = "pro1oobarba/navwarn-hub";
 const AREAS = [
@@ -245,6 +353,73 @@ async function loadAll() {
 }
 
 loadAll();
+
+// ---------- Text converter panel ----------
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function showConvResult(kind, message) {
+  const el = document.getElementById("conv-result");
+  el.className = `result ${kind}`;
+  el.textContent = message;
+}
+
+function runConversion(format) {
+  const text = document.getElementById("conv-text").value.trim();
+  const refInput = document.getElementById("conv-ref").value.trim();
+  const reference = refInput || "NAV MSG 1";
+
+  if (!text) {
+    showConvResult("error", "Вставь текст предупреждения — поле пустое.");
+    return;
+  }
+
+  let converted;
+  try {
+    converted = window.NavareaConvert.convertNavareaText(text, reference);
+  } catch (err) {
+    showConvResult("error", `Ошибка разбора текста: ${err.message}`);
+    return;
+  }
+
+  if (converted.objectCount === 0) {
+    showConvResult("warn", "Не нашёл ни одной координаты в тексте — файл не создан. Проверь формат (нужны координаты вида 59-28.0N 001-50.4E).");
+    return;
+  }
+
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 13).replace("T", "_");
+  const safeRef = reference.replace(/[^A-Za-z0-9]+/g, "_");
+
+  if (format === "jrc") {
+    const blocks = window.NavareaConvert.resultsToBlocks(converted.results);
+    const content = window.NavareaConvert.buildJrcUsermap(blocks, `${reference} - manual conversion - ${stamp}`);
+    downloadFile(`${safeRef}_jrc_${stamp}.csv`, content, "text/csv");
+  } else {
+    const content = window.NavareaConvert.resultsToFurunoXml(converted.results, `${reference} - manual conversion - ${stamp}`);
+    downloadFile(`${safeRef}_furuno_${stamp}.xml`, content, "application/xml");
+  }
+
+  const flagNote = converted.flaggedCount > 0
+    ? ` ${converted.flaggedCount} объект(ов) помечены как неоднозначные (flagged) — перепроверь их вручную.`
+    : "";
+  showConvResult(
+    converted.flaggedCount > 0 ? "warn" : "ok",
+    `Готово: ${converted.objectCount} объект(ов) сконвертировано.${flagNote}`
+  );
+}
+
+document.getElementById("conv-jrc").addEventListener("click", () => runConversion("jrc"));
+document.getElementById("conv-furuno").addEventListener("click", () => runConversion("furuno"));
 </script>
 </body>
 </html>
