@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INEOS NAVAREA — файлы для ECDIS</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #131c2e;
+    --border: #223047;
+    --text: #e6edf7;
+    --muted: #8fa0bd;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  h1 {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin-bottom: 32px;
+    font-size: 0.95rem;
+  }
+  .area-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .area-card h2 {
+    margin: 0 0 4px;
+    font-size: 1.1rem;
+  }
+  .area-card .meta {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+  }
+  .download-btn {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    text-decoration: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: background 0.15s;
+  }
+  .download-btn:hover { background: var(--accent-hover); }
+  details {
+    margin-top: 14px;
+  }
+  summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.85rem;
+    user-select: none;
+  }
+  .history-list {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+  }
+  .history-list li {
+    border-bottom: 1px solid var(--border);
+  }
+  .history-list a {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 4px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  .history-list a:hover { color: var(--accent); }
+  .history-list .size {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  footer {
+    margin-top: 40px;
+    color: var(--muted);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+  footer a { color: var(--muted); }
+  .error {
+    color: #f87171;
+    font-size: 0.85rem;
+  }
+  .empty {
+    color: var(--muted);
+    font-size: 0.85rem;
+    padding: 8px 4px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>INEOS NAVAREA</h1>
+  <p class="subtitle">Навигационные предупреждения, готовые к загрузке в JRC ECDIS (JAN-9201 user map CSV). Обновляется автоматически.</p>
+
+  <div id="areas"></div>
+
+  <footer>
+    Генерируется автоматически из <a href="https://www.sealagom.com" target="_blank" rel="noopener">SeaLagom</a> через
+    <a href="https://github.com/pro1oobarba/ineos-nav-toolkit" target="_blank" rel="noopener">ineos-nav-toolkit</a>.
+    Файлы старше 30 дней удаляются автоматически.
+  </footer>
+</main>
+
+<script>
+const REPO = "pro1oobarba/ineos-navarea-live";
+const AREAS = [
+  { code: "IV", label: "NAVAREA IV" },
+  { code: "I", label: "NAVAREA I" },
+];
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function parseTimestampFromName(name) {
+  // NAVAREA_IV_usermap_20260813_0600.csv -> 2026-08-13 06:00
+  const m = name.match(/(\d{8})_(\d{4})\.csv$/);
+  if (!m) return null;
+  const [, ymd, hm] = m;
+  return `${ymd.slice(0,4)}-${ymd.slice(4,6)}-${ymd.slice(6,8)} ${hm.slice(0,2)}:${hm.slice(2,4)} UTC`;
+}
+
+async function loadArea(area) {
+  const card = document.createElement("div");
+  card.className = "area-card";
+
+  const latestUrl = `https://raw.githubusercontent.com/${REPO}/main/output/NAVAREA_${area.code}_latest.csv`;
+
+  card.innerHTML = `
+    <h2>${area.label}</h2>
+    <div class="meta">Всегда актуальный файл, без входа в аккаунт</div>
+    <a class="download-btn" href="${latestUrl}" download>Скачать последний CSV</a>
+    <details>
+      <summary>История по датам</summary>
+      <ul class="history-list"><li class="empty">Загрузка...</li></ul>
+    </details>
+  `;
+  document.getElementById("areas").appendChild(card);
+
+  const list = card.querySelector(".history-list");
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/output`);
+    if (!res.ok) throw new Error(`GitHub API вернул ${res.status}`);
+    const files = await res.json();
+    const matching = files
+      .filter((f) => f.name.startsWith(`NAVAREA_${area.code}_usermap_`) && f.name.endsWith(".csv"))
+      .sort((a, b) => b.name.localeCompare(a.name));
+
+    if (!matching.length) {
+      list.innerHTML = '<li class="empty">Пока нет истории</li>';
+      return;
+    }
+
+    list.innerHTML = matching
+      .map((f) => {
+        const when = parseTimestampFromName(f.name) ?? f.name;
+        return `<li><a href="${f.download_url}" download><span>${when}</span><span class="size">${formatBytes(f.size)}</span></a></li>`;
+      })
+      .join("");
+  } catch (err) {
+    list.innerHTML = `<li class="error">Не удалось загрузить историю: ${err.message}</li>`;
+  }
+}
+
+AREAS.forEach(loadArea);
+</script>
+</body>
+</html>
