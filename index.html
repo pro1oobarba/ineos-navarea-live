@@ -298,9 +298,13 @@ async function loadArea(area, allFiles) {
 
   const latestButtons = FORMATS
     .map((fmt) => {
-      const url = `https://raw.githubusercontent.com/${REPO}/main/output/${fmt.latestName(area.code)}`;
+      // Same-origin relative path (not raw.githubusercontent.com) - the HTML `download`
+      // attribute is silently ignored by browsers for cross-origin links, which was
+      // causing the file to open inline instead of saving. Pages serves output/ directly
+      // since it's the same repo, so a relative link keeps it same-origin.
+      const url = `output/${fmt.latestName(area.code)}`;
       const secondary = fmt.key !== "jrc" ? " secondary" : "";
-      return `<a class="download-btn${secondary}" href="${url}" download>Скачать ${fmt.label}</a>`;
+      return `<a class="download-btn${secondary}" href="${url}" download="${fmt.latestName(area.code)}">Скачать ${fmt.label}</a>`;
     })
     .join("");
 
@@ -332,7 +336,9 @@ async function loadArea(area, allFiles) {
     list.innerHTML = matching
       .map((f) => {
         const when = parseTimestampFromName(f.name) ?? f.name;
-        return `<li><a href="${f.download_url}" download><span><span class="format-tag">${f.fmt.label}</span>${when}</span><span class="size">${formatBytes(f.size)}</span></a></li>`;
+        // Same-origin relative path, not f.download_url (GitHub API returns a
+        // raw.githubusercontent.com URL, cross-origin -> download attribute ignored).
+        return `<li><a href="output/${f.name}" download="${f.name}"><span><span class="format-tag">${f.fmt.label}</span>${when}</span><span class="size">${formatBytes(f.size)}</span></a></li>`;
       })
       .join("");
   } catch (err) {
